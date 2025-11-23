@@ -205,3 +205,38 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# --- IGNORE ---
+
+# uv environment
+.venv/
+
+# uv lockfile backup (optional)
+uv.lock.bak
+
+# Package build artifacts
+dist/
+build/
+*.egg-info/
+
+# Jupyter notebooks automatic checkpoints (safe redundancy)
+.ipynb_checkpoints/
+
+# VS Code settings (optional but recommended)
+.vscode/
+
+# PyCharm / IntelliJ
+.idea/
+
+# Data folders (you should not commit raw financial data)
+data/raw/
+data/processed/
+
+# Model outputs
+experiments/
+reports/figures/
+reports/*.pdf
+
+# Logs
+*.log
