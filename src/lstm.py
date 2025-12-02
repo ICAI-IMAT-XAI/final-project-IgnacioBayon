@@ -6,12 +6,27 @@ import utils.metrics as metrics
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 
+class LSTMRegressor(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=2, dropout=0.2):
+        super(LSTMRegressor, self).__init__()
+        self.lstm = nn.LSTM(
+            input_size, hidden_size, num_layers, batch_first=True, dropout=dropout
+        )
+        self.fc = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        out = self.fc(lstm_out[:, -1, :])
+        return out.squeeze()
+
+
 def train_lstm(
     model: nn.Module,
     train_loader: torch.utils.data.DataLoader,
     val_loader: torch.utils.data.DataLoader = None,
     num_epochs=100,
     lr=1e-3,
+    patience=15,
     model_name="best_lstm_model.pth",
 ):
     model_path = os.path.join("../models", model_name)
@@ -19,9 +34,11 @@ def train_lstm(
         os.makedirs("../models")
 
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
 
     best_val_loss = float("inf")
+
+    early_stopping_counter = 0
 
     train_loss_history, val_loss_history = [], []
     train_rmse_history, val_rmse_history = [], []
@@ -71,6 +88,14 @@ def train_lstm(
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 torch.save(model.state_dict(), model_path)
+                early_stopping_counter = 0
+            else:
+                early_stopping_counter += 1
+                if early_stopping_counter >= patience:
+                    print(
+                        f"Early stopping at epoch {epoch+1}. Best Val RMSE: {np.sqrt(best_val_loss):.6f}"
+                    )
+                    break
 
             if (epoch + 1) % 10 == 0:
                 print(
@@ -83,20 +108,26 @@ def train_lstm(
                 f"Epoch {epoch+1}/{num_epochs} | "
                 f"Train RMSE: {train_rmse_history[-1]:.6f}"
             )
-    
+
     # Print it has been saved
     if val_loader:
-        print(f"\nBest model saved to {model_path} with Val RMSE: {np.sqrt(best_val_loss):.6f}\n")
+        print(
+            f"\nBest model saved to {model_path} with Val RMSE: {np.sqrt(best_val_loss):.6f}\n"
+        )
     else:
         # If no validation, save the final model
         torch.save(model.state_dict(), model_path)
         print(f"\nModel saved to {model_path}")
 
-
     if not val_loader:
         val_loss_history = None
         val_rmse_history = None
         val_mase_history = None
+    else:
+        print(
+            f"\nTraining finished. Best model saved to {model_path}",
+            f"\nBest Val RMSE: {np.sqrt(best_val_loss):.6f}\n",
+        )
 
     return (
         train_loss_history,

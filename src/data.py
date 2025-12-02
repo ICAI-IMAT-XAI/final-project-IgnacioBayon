@@ -95,7 +95,7 @@ def compute_features(df: pd.DataFrame, trading_periods: int = 252) -> pd.DataFra
     # 5. High/Low log return
     df["Log_HL"] = np.log(df["High"] / df["Low"])
 
-    # 6. RSI (14)
+    # 6. RSI (14) - Relative Strength Index
     delta = df["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -109,7 +109,7 @@ def compute_features(df: pd.DataFrame, trading_periods: int = 252) -> pd.DataFra
     std20 = df["Close"].rolling(20).std()
     df["BB_Width"] = (2 * std20) / sma20
 
-    # 8. MACD (12, 26)
+    # 8. MACD (12, 26) - Moving Average Convergence Divergence
     ema12 = df["Close"].ewm(span=12, adjust=False).mean()
     ema26 = df["Close"].ewm(span=26, adjust=False).mean()
     df["MACD"] = ema12 - ema26
@@ -166,15 +166,15 @@ def create_sequences(
     Create sequences of features and targets for time series modeling.
 
     Args:
-        df (pd.DataFrame): DataFrame containing the data.
+        df (pd.DataFrame): DataFrame containing the data with shape (num_samples, num_features).
         feature_cols (list[str]): List of column names to be used as features.
         target_col (str): Column name to be used as the target.
         seq_len (int): Length of the sequences.
 
     Returns:
-        X (np.ndarray): Array of shape (num_sequences, seq_len, num_features).
-        y (np.ndarray): Array of shape (num_sequences,).
-        dates (np.ndarray): Array of shape (num_sequences,).
+        X (np.ndarray): Array of shape (num_samples, seq_len, num_features).
+        y (np.ndarray): Array of shape (num_samples,).
+        dates (np.ndarray): Array of shape (num_samples,).
     """
     df = df.copy().dropna()
 
@@ -249,6 +249,13 @@ def load_data(
     df = download_data(ticker, start_date, end_date)
     df = compute_features(df)
 
+    # Data Scaling - Fit scaler only on training data
+    train_size_idx = int(len(df) * train_size)
+    scaler = sklearn.preprocessing.StandardScaler()
+    scaler.fit(df[feature_cols].iloc[:train_size_idx])
+    df.loc[:, feature_cols] = scaler.transform(df[feature_cols])
+
+    # Create sequences
     X, y, dates = create_sequences(df, feature_cols, target_col, seq_len)
 
     train_split, val_split, test_split = split_sequences(
@@ -257,14 +264,6 @@ def load_data(
 
     train_dataset = VolatilityDataset(*train_split)
     test_dataset = VolatilityDataset(*test_split)
-    # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    # test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    # If no validation split, return None for val_dataloader
-    if val_split is None:
-        return train_dataset, None, test_dataset
-    # Otherwise construct validation dataloader
-    val_dataset = VolatilityDataset(*val_split)
-    # val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    val_dataset = VolatilityDataset(*val_split) if val_split is not None else None
 
     return train_dataset, val_dataset, test_dataset
