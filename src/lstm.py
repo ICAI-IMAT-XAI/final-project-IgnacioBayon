@@ -138,14 +138,23 @@ def train_lstm(
     )
 
 
-def evaluate_lstm(model, test_loader, y_true):
+def evaluate_lstm(
+    model: torch.nn.Module, test_loader: torch.utils.data.DataLoader, y_true: np.ndarray
+):
+    model.eval()
+    preds = []
+
     with torch.no_grad():
-        preds = []
-        for X_batch, y_batch in test_loader:
+        for X_batch, _ in test_loader:
             outputs = model(X_batch)
-            preds.extend(outputs.squeeze().numpy())
+            preds.extend(outputs.squeeze().cpu().numpy())
+
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.cpu().numpy()
 
     preds = np.array(preds)
+
     mae = mean_absolute_error(y_true, preds)
     rmse = np.sqrt(mean_squared_error(y_true, preds))
+
     return preds, mae, rmse

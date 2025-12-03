@@ -243,3 +243,5 @@ reports/*.pdf
 
 # --- OWN FILES ---
 models/
+
+notebooks/*.pdf

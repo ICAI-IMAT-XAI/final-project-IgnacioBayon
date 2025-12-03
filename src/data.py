@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import math
-import sklearn.preprocessing
+from sklearn.preprocessing import StandardScaler
 import typing
 
 import torch
@@ -82,8 +82,8 @@ def compute_features(df: pd.DataFrame, trading_periods: int = 252) -> pd.DataFra
     df["LogReturn"] = np.log(df["Close"] / df["Close"].shift(1))
 
     # 2. Realised Volatility (target)
-    df["RealisedVolatility"] = (
-        df["LogReturn"].rolling(21).std() * np.sqrt(trading_periods)
+    df["RealisedVolatility"] = df["LogReturn"].rolling(21).std() * np.sqrt(
+        trading_periods
     )
 
     # 3. Yang–Zhang Volatility (feature)
@@ -115,7 +115,6 @@ def compute_features(df: pd.DataFrame, trading_periods: int = 252) -> pd.DataFra
     df["MACD"] = ema12 - ema26
 
     return df.dropna()
-
 
 
 def yang_zhang_vol(
@@ -178,17 +177,22 @@ def create_sequences(
     """
     df = df.copy().dropna()
 
-    X_list, y_list, date_list = [], [], []
+    X = df[feature_cols].values
+    y = df[target_col].values
+    dates = df.index.values
+
+    X_seq, y_seq, date_seq = [], [], []
+
     for i in range(len(df) - seq_len):
-        X_list.append(df.iloc[i : i + seq_len][feature_cols].values)
-        y_list.append(df.iloc[i + seq_len][target_col])
-        date_list.append(df.index[i + seq_len])
+        X_seq.append(X[i : i + seq_len])
+        y_seq.append(y[i + seq_len])
+        date_seq.append(dates[i + seq_len])
 
-    X = np.array(X_list)
-    y = np.array(y_list)
-    dates = np.array(date_list)
-
-    return X, y, dates
+    return (
+        np.array(X_seq, dtype=np.float32),
+        np.array(y_seq, dtype=np.float32),
+        np.array(date_seq),
+    )
 
 
 def split_sequences(X, y, dates, train_size=0.7, test_size=0.15):
@@ -196,27 +200,22 @@ def split_sequences(X, y, dates, train_size=0.7, test_size=0.15):
     Split sequences into training and testing sets
     """
     n = len(X)
-    assert len(y) == n
-    assert len(dates) == n
 
     train_end = int(n * train_size)
+    test_start = int(n * (1 - test_size))
 
-    # Only train and test splits
-    if abs(train_size + test_size - 1) < 1e-6:
-        return (
-            (X[:train_end], y[:train_end], dates[:train_end]),
-            None,
-            (X[train_end:], y[train_end:], dates[train_end:]),
-        )
+    X_train, y_train, dates_train = X[:train_end], y[:train_end], dates[:train_end]
+    X_val, y_val, dates_val = X[train_end:test_start], y[train_end:test_start], dates[train_end:test_start]
+    X_test, y_test, dates_test = X[test_start:], y[test_start:], dates[test_start:]
 
-    # Train, validation, and test splits
-    else:
-        val_end = int(n * (train_size + test_size))
-        return (
-            (X[:train_end], y[:train_end], dates[:train_end]),
-            (X[train_end:val_end], y[train_end:val_end], dates[train_end:val_end]),
-            (X[val_end:], y[val_end:], dates[val_end:]),
-        )
+    # If validation segment is empty, return None
+    val = None if len(X_val) == 0 else (X_val, y_val, dates_val)
+
+    return (
+        (X_train, y_train, dates_train),
+        val,
+        (X_test, y_test, dates_test)
+    )
 
 
 def load_data(
@@ -249,9 +248,9 @@ def load_data(
     df = download_data(ticker, start_date, end_date)
     df = compute_features(df)
 
-    # Data Scaling - Fit scaler only on training data
+    # Fit feature scaler on training data only
     train_size_idx = int(len(df) * train_size)
-    scaler = sklearn.preprocessing.StandardScaler()
+    scaler = StandardScaler()
     scaler.fit(df[feature_cols].iloc[:train_size_idx])
     df.loc[:, feature_cols] = scaler.transform(df[feature_cols])
 
