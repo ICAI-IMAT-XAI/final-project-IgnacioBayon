@@ -3,41 +3,6 @@ import numpy as np
 import yfinance as yf
 import math
 from sklearn.preprocessing import StandardScaler
-import typing
-
-import torch
-from torch.utils.data import Dataset, DataLoader
-
-
-class VolatilityDataset(Dataset):
-    def __init__(self, X, y, dates):
-        """
-        Args:
-            X (np.ndarray): Feature sequences of shape (num_samples, seq_len, num_features).
-            y (np.ndarray): Target values of shape (num_samples,).
-            dates (np.ndarray): Dates corresponding to each sample of shape (num_samples,).
-        """
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
-        self.dates = dates  # keep as numpy array for XAI
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx], self.dates[idx]
-
-
-class TimeSeriesDataset(Dataset):
-    def __init__(self, X: torch.Tensor, y: torch.Tensor):
-        self.X = X.clone().detach()
-        self.y = y.clone().detach().squeeze()
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
 
 
 def download_data(
@@ -179,7 +144,7 @@ def create_sequences(
 
     X = df[feature_cols].values
     y = df[target_col].values
-    dates = df.index.values
+    dates = df.index.values.astype("datetime64[D]")
 
     X_seq, y_seq, date_seq = [], [], []
 
@@ -205,17 +170,17 @@ def split_sequences(X, y, dates, train_size=0.7, test_size=0.15):
     test_start = int(n * (1 - test_size))
 
     X_train, y_train, dates_train = X[:train_end], y[:train_end], dates[:train_end]
-    X_val, y_val, dates_val = X[train_end:test_start], y[train_end:test_start], dates[train_end:test_start]
+    X_val, y_val, dates_val = (
+        X[train_end:test_start],
+        y[train_end:test_start],
+        dates[train_end:test_start],
+    )
     X_test, y_test, dates_test = X[test_start:], y[test_start:], dates[test_start:]
 
     # If validation segment is empty, return None
     val = None if len(X_val) == 0 else (X_val, y_val, dates_val)
 
-    return (
-        (X_train, y_train, dates_train),
-        val,
-        (X_test, y_test, dates_test)
-    )
+    return ((X_train, y_train, dates_train), val, (X_test, y_test, dates_test))
 
 
 def load_data(
@@ -241,9 +206,9 @@ def load_data(
         test_size (float): Proportion of data to use for testing.
         batch_size (int): Batch size for DataLoader.
     Returns:
-        train_dataset (Dataset): Dataset for training set.
-        val_dataset (Dataset | None): Dataset for validation set. If no validation set, returns None.
-        test_dataset (Dataset): Dataset for testing set.
+        train (tuple[np.ndarray, np.ndarray, np.ndarray]): (X_train, y_train, dates_train)
+        val (tuple[np.ndarray, np.ndarray, np.ndarray] | None): (X_val, y_val, dates_val) or None if no validation set
+        test (tuple[np.ndarray, np.ndarray, np.ndarray]): (X_test, y_test, dates_test)
     """
     df = download_data(ticker, start_date, end_date)
     df = compute_features(df)
@@ -257,12 +222,4 @@ def load_data(
     # Create sequences
     X, y, dates = create_sequences(df, feature_cols, target_col, seq_len)
 
-    train_split, val_split, test_split = split_sequences(
-        X, y, dates, train_size, test_size
-    )
-
-    train_dataset = VolatilityDataset(*train_split)
-    test_dataset = VolatilityDataset(*test_split)
-    val_dataset = VolatilityDataset(*val_split) if val_split is not None else None
-
-    return train_dataset, val_dataset, test_dataset
+    return split_sequences(X, y, dates, train_size, test_size)

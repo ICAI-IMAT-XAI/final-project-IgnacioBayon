@@ -4,6 +4,23 @@ import numpy as np
 import os
 import utils.metrics as metrics
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from torch.utils.data import Dataset
+
+
+class LSTMDataset(Dataset):
+    """
+    LSTM Dataset for volatility prediction.
+    """
+
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
 
 
 class LSTMRegressor(nn.Module):
@@ -112,22 +129,16 @@ def train_lstm(
     # Print it has been saved
     if val_loader:
         print(
-            f"\nBest model saved to {model_path} with Val RMSE: {np.sqrt(best_val_loss):.6f}\n"
+            f"\nTraining finished. Best model saved to {model_path}",
+            f"\nBest Val RMSE: {np.sqrt(best_val_loss):.6f}\n",
         )
     else:
         # If no validation, save the final model
         torch.save(model.state_dict(), model_path)
-        print(f"\nModel saved to {model_path}")
-
-    if not val_loader:
+        print(f"\nTraining finished. Model saved to {model_path}")
         val_loss_history = None
         val_rmse_history = None
         val_mase_history = None
-    else:
-        print(
-            f"\nTraining finished. Best model saved to {model_path}",
-            f"\nBest Val RMSE: {np.sqrt(best_val_loss):.6f}\n",
-        )
 
     return (
         train_loss_history,
