@@ -56,6 +56,7 @@ def train_lstm(
     best_val_loss = float("inf")
 
     early_stopping_counter = 0
+    best_val_epoch = 0
 
     train_loss_history, val_loss_history = [], []
     train_rmse_history, val_rmse_history = [], []
@@ -104,13 +105,14 @@ def train_lstm(
 
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
+                best_val_epoch = epoch + 1
                 torch.save(model.state_dict(), model_path)
                 early_stopping_counter = 0
             else:
                 early_stopping_counter += 1
                 if early_stopping_counter >= patience:
                     print(
-                        f"Early stopping at epoch {epoch+1}. Best Val RMSE: {np.sqrt(best_val_loss):.6f}"
+                        f"Early stopping at epoch {epoch+1}. Best Val RMSE: {np.sqrt(best_val_loss):.6f}, at epoch {best_val_epoch}."
                     )
                     break
 
@@ -130,7 +132,7 @@ def train_lstm(
     if val_loader:
         print(
             f"\nTraining finished. Best model saved to {model_path}",
-            f"\nBest Val RMSE: {np.sqrt(best_val_loss):.6f}\n",
+            f"\nBest Val RMSE: {np.sqrt(best_val_loss):.6f} at epoch {best_val_epoch}\n",
         )
     else:
         # If no validation, save the final model
