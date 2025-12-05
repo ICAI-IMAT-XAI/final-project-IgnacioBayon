@@ -8,6 +8,7 @@ dependencies = [
     "arch>=8.0.0",
     "captum>=0.7.0",
     "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
     "jupyterlab>=4.5.0",
     "matplotlib>=3.10.7",
     "numba>=0.62.1",
