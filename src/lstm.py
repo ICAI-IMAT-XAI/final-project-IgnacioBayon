@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import os
 import utils.metrics as metrics
@@ -35,6 +36,72 @@ class LSTMRegressor(nn.Module):
         lstm_out, _ = self.lstm(x)
         out = self.fc(lstm_out[:, -1, :])
         return out.squeeze()
+
+
+class Attention(nn.Module):
+    """
+    Computes a weighted average of the LSTM outputs (all time steps).
+    The weights are learned dynamically.
+    """
+
+    def __init__(self, hidden_size):
+        super(Attention, self).__init__()
+        # A simple linear layer to calculate a score for each time step
+        self.attn = nn.Linear(hidden_size, 1)
+
+    def forward(self, lstm_outputs):
+        # lstm_outputs shape: (Batch, Seq_Len, Hidden_Size)
+
+        # 1. Calculate scores for each time step
+        # Shape: (Batch, Seq_Len, 1)
+        scores = self.attn(lstm_outputs)
+
+        # 2. Normalize scores to probabilities (weights) summing to 1
+        # Shape: (Batch, Seq_Len, 1)
+        attn_weights = F.softmax(scores, dim=1)
+
+        # 3. Multiply each time step by its weight and sum them up
+        # Context shape: (Batch, Hidden_Size)
+        context = torch.sum(attn_weights * lstm_outputs, dim=1)
+
+        return context, attn_weights
+
+
+class LSTMAttentionRegressor(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_layers=2, dropout=0.2):
+        super(LSTMAttentionRegressor, self).__init__()
+
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        # 1. LSTM Layer
+        self.lstm = nn.LSTM(
+            input_size, hidden_size, num_layers, batch_first=True, dropout=dropout
+        )
+
+        # 2. Attention Layer
+        self.attention = Attention(hidden_size)
+
+        # 3. Fully Connected Layer (Regressor)
+        self.fc = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        # x shape: (Batch, Seq_Len, Features)
+
+        # Get output for ALL time steps, not just the last one
+        # lstm_out shape: (Batch, Seq_Len, Hidden_Size)
+        lstm_out, _ = self.lstm(x)
+
+        # Apply Attention
+        # We get the 'context' (weighted summary) and the weights (for visualization)
+        context, attn_weights = self.attention(lstm_out)
+
+        # Predict using the context vector
+        out = self.fc(context)
+
+        return (
+            out.squeeze()
+        )  # , attn_weights (Return this if you want to plot the attention!)
 
 
 def train_lstm(
