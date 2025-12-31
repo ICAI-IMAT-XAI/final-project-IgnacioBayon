@@ -1,0 +1,13 @@
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+
+# Ignore main.tex:mshield and main.tex:Zone.Identifier
+main.tex:mshield    
+main.tex:Zone.Identifier

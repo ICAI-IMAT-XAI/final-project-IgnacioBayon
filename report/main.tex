@@ -1,0 +1,345 @@
+\documentclass[12pt]{article}
+
+% --- Language & Encoding ---
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+
+% --- Layout & Formatting ---
+\usepackage{geometry}
+\geometry{top=2.5cm, bottom=3.5cm, left=2.5cm, right=2.5cm}
+\setlength{\parskip}{0.5em}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{url}
+
+% --- Math & Symbols ---
+\usepackage{amsmath, amssymb}
+\numberwithin{equation}{section}
+\setlength{\jot}{12pt} 
+
+% --- Tables & Figures ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+% \renewcommand{\tableautorefname}{Table}
+% \renewcommand{\figureautorefname}{Figure}
+% \renewcommand{\equationautorefname}{Equation}
+
+% --- Code (Python) ---
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{blue},
+    stringstyle=\color{teal},
+    commentstyle=\color{gray}\itshape,
+    numbers=left,
+    numberstyle=\tiny,
+    frame=none,
+    breaklines=true,
+    showstringspaces=false,
+    captionpos=b
+}
+
+% --- Diagrams
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+
+% --- Navigation ---
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+% --- Warnings to ignore ---
+% chktex-file 13
+% chktex-file 38
+% chktex-file 24
+% chktex-file 35
+
+
+% % --- SMALL TITLE ---
+% \usepackage{titlesec}
+% \titlespacing*{\section}{0pt}{*1}{*0.5} 
+% \titlespacing*{\subsection}{0pt}{*0.8}{*0.4}
+% \title{\textbf{XAI for Volatility Forecasting}}
+% \author{Ignacio Bayón Jiménez-Ugarte \\ \textit{Universidad Pontificia Comillas ICAI}}
+% \date{Academic Year 2025/2026}
+
+% --- HEADER CONFIGURATION ---
+\setlength{\headheight}{2cm}
+\fancyhf{}
+\fancyhead[L]{\includegraphics[width=2cm]{images/logos/Color_logo_comillas.png}}
+\fancyhead[C]{%
+    \hspace{2cm} \textbf{UNIVERSIDAD PONTIFICIA COMILLAS}\\
+    \hspace{2cm} Escuela Técnica Superior de Ingeniería ICAI\\
+    \hspace{2cm} Master's Degree in Artificial Intelligence
+}
+
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \includegraphics[width=0.35\textwidth]{images/logos/Logo_comillas.png}\\[2.5cm]
+    % {\Large MASTER'S DEGREE IN}\\[0.5cm]
+    % {\Large ARTIFICIAL INTELLIGENCE}\\[1.5cm]
+    % {\Large MAASTER'S THESIS}\\[1.3cm]
+    {\Large \textbf{XAI FOR VOLATILITY FORECASTING}}\\[2.5  cm]
+    {\large Ignacio Bayón Jiménez-Ugarte} \\[1.5cm]
+    \raisebox{-2cm}[0cm][0cm]{\normalsize Madrid, December 2025}
+    \vfill
+\end{titlepage}
+
+% \maketitle
+
+\newpage
+\pagestyle{fancy}  % Put after abstract to avoid header on abstract page
+
+\begin{abstract}
+    This project presents an end-to-end Explainable AI (XAI) case study focused on forecasting financial volatility. Using historical market data for \textbf{Tesla (TSLA)}, we model the \textit{difference in realised volatility} using Machine Learning techniques, including Random Forest and LSTM. The core of this study applies XAI techniques to unbox these models, deriving actionable insights for trading risk management and critically evaluating the faithfulness of the generated explanations.
+\end{abstract}
+
+% \newpage
+
+\tableofcontents
+
+\newpage
+
+\fancyfoot[C]{\thepage}
+\setcounter{page}{1}
+
+
+\section{Introduction}
+
+\textbf{Problem \& Motivation} \\
+Financial markets are defined by volatility. This project addresses the challenge of forecasting the \textbf{Difference in Realised Volatility} ($RV_{diff}$) for \textbf{Tesla (TSLA)}. Unlike standard price prediction, forecasting the \textit{change} in volatility allows for better detection of regime shifts.
+
+A central conflict in quantitative finance is the trade-off between accuracy and interpretability. While Deep Learning models (like LSTMs) theoretically capture complex patterns, their ``black box'' nature makes them risky for deployment. This study employs Explainable AI (XAI) to bridge this gap, using methods like SHAP and Integrated Gradients to validate whether models (Random Forest vs. LSTM) are learning genuine market dynamics or merely overfitting to noise.
+
+\textbf{Stakeholders} \\
+The transparency provided by this framework serves:
+\begin{itemize}
+    \item \textbf{Risk Managers:} To validate predictions against market fundamentals before adjusting VaR limits.
+    \item \textbf{Quantitative Traders:} To identify specific technical drivers (e.g., RSI) behind signals for hedging.
+    \item \textbf{Regulators:} To ensure algorithmic accountability and prevent reliance on spurious correlations.
+\end{itemize}
+
+
+\section{Data and Methods}
+
+\subsection{Dataset and Feature Engineering}
+We utilize daily OHLC data for \textbf{Tesla Inc. (TSLA)} (Jan 2015--Present). To prevent data leakage, we applied a strict temporal split: \textbf{Train (70\%)}, \textbf{Validation (15\%)}, and \textbf{Test (15\%)}.
+
+\subsubsection{Target: Differential Volatility}
+The forecasting target is the \textbf{Difference in Realised Volatility} ($\Delta RV = RV_{t} - RV_{t-1}$).
+Initial experiments forecasting absolute $RV_t$ failed to beat naive baselines due to high autocorrelation. By targeting the \textit{difference}, we stationarize the series, forcing the model to learn the \textit{drivers of change} (market shocks) rather than simply memorizing the previous day's value.
+
+\subsubsection{Input Features}
+We constructed 8 features to capture volatility and momentum dynamics with a $T=30$ day window:
+\begin{itemize}
+    \item \textbf{Volatility:} Lagged $RV$ and Yang-Zhang Volatility.\footnote{Formula based on Yang, D. and Zhang, Q. (2000) ``Drift-Independent Volatility Estimation'', \textit{Journal of Business}. Implementation adapted from \url{https://www.pyquantnews.com/the-pyquant-newsletter/how-to-compute-volatility-6-ways}.}
+    \item \textbf{Momentum:} RSI (\texttt{RSI\_14}, Relative Strength Index) and MACD (Moving Average Convergence/Divergence) for overbought/oversold detection.
+    \item \textbf{Dynamics:} Bollinger Band Width (\texttt{BB\_Width}) for compression/expansion.
+    \item \textbf{Price:} Log Returns of Close, Close/Open (\texttt{Log\_CO}), and High/Low (\texttt{Log\_HL}).
+\end{itemize}
+
+\subsection{Modelling Strategy}
+
+\subsubsection{Random Forest}
+We implemented a Random Forest Regressor where the 30-day window is flattened into a vector ($30 \times 8 = 240$ inputs). Hyperparameters were optimized using \textbf{Time Series Cross-Validation} to respect temporal order. The final configuration uses: \texttt{n\_estimators=300}, \texttt{max\_depth=20}, and \texttt{min\_samples\_leaf=5} (to prevent overfitting).
+
+\subsubsection{Deep Learning: LSTM Network}
+To capture temporal dependencies without flattening, we implemented an \textbf{LSTM} (Long Short-Term Memory) network in PyTorch.
+\begin{itemize}
+    \item \textbf{Architecture:} Input ($30 \times 8$) $\to$ LSTM Layer (Hidden=32) $\to$ Dropout ($p=0.3$) $\to$ Linear Output Head.
+    \item \textbf{Training:} Adam Optimizer, MSE Loss, and Early Stopping (Patience=10) on validation loss.
+\end{itemize}
+
+\subsection{Explainability Framework (XAI)}
+We employ two XAI techniques to validate model behavior:
+
+\textbf{1. Global Interpretability: SHAP} \\
+We use \textbf{SHAP (SHapley Additive exPlanations)} to generate summary plots for the Random Forest. This game-theoretic approach attributes prediction output fairly among features, allowing us to verify if the model relies on financial fundamentals or spurious correlations.
+
+\textbf{2. Sequential Interpretability: Integrated Gradients (IG)} \\
+For the LSTM, we use \textbf{Integrated Gradients}, a gradient-based method satisfying the axiom of \textit{Completeness}. Unlike perturbation methods, IG provides a rigorous ``white-box'' view of how the network's memory cells react to specific sequential patterns over the 30-day window.
+
+
+\section{Results and Analysis}
+
+\subsection{Model Performance Evaluation}
+We evaluated the predictive performance of the Random Forest and LSTM models against a naive baseline, which assumes zero change in volatility ($\Delta RV_t = 0$).
+
+\begin{table}[H]
+    \centering
+    \caption{Performance Comparison on Test Set (Target: $\Delta RV$)}
+    \label{tab:results}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Model} & \textbf{MAE} & \textbf{RMSE} & \textbf{Improvement vs. Baseline} \\
+        \midrule
+        Naive Baseline & 0.0990       & 0.2078        & ---                               \\
+        Random Forest  & 0.0896       & 0.1897        & +9.43\%                           \\
+        LSTM           & 0.0982       & 0.2053        & +0.77\%                           \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The \textbf{Random Forest} achieved a robust \textbf{9.43\% improvement}. In contrast, the standard \textbf{LSTM} performed marginally better than the baseline (+0.77\%).
+
+\textbf{Hypothesis: Vanishing Gradients} \\
+Given the Random Forest's success with the same data, the LSTM's failure appears architectural. We hypothesize that the model suffers from \textit{Vanishing Gradients}, causing it to bias heavily towards recent time steps ($t-1$) while losing the long-term structural patterns ($t-21$) required for this forecast.
+
+To validate this, we introduced an \textbf{Attention LSTM} to allow direct access to past states without gradient decay.
+
+\begin{table}[H]
+    \centering
+    \caption{Performance Comparison between LSTMs on Test Set (Target: $\Delta RV$)}
+    \label{tab:attention_results}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Model}      & \textbf{MAE} & \textbf{RMSE} & \textbf{Improvement vs. Baseline} \\
+        \midrule
+        LSTM                & 0.0982       & 0.2053        & +0.77\%                           \\
+        LSTM with Attention & 0.0986       & 0.2069        & +0.36\%                           \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Contrary to expectations, the Attention mechanism did not improve performance. The increased complexity likely caused the model to ``attend'' to stochastic noise rather than robust signals, slightly degrading the error metrics.
+
+\subsection{Visual XAI Analysis}
+
+\subsubsection{Random Forest: Reverse-Engineering the Formula}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/rf_shap.png}
+    \caption{\textbf{SHAP Summary (RF)}}
+    \label{fig:rf_shap}
+\end{figure}
+
+The SHAP plot reveals that the Random Forest relies heavily on \textbf{\texttt{LogReturn\_t-21}}. This is not arbitrary; it reflects the mathematical definition of Realised Volatility ($RV$), calculated over a 21-day rolling window. The model successfully ``discovered'' that the change in volatility is mathematically determined by the difference between the new observation ($t$) and the old one leaving the window ($t-21$).
+
+\subsubsection{Standard LSTM: Evidence of Vanishing Gradients}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/lstm_ig.png}
+    \caption{\textbf{Integrated Gradients (Standard LSTM).}}
+    \label{fig:lstm_ig}
+\end{figure}
+
+The attribution map confirms our hypothesis. Despite theoretical access to the past, the model places near-zero weight on the critical $t-21$ lag identified by the RF. The gradients decay rapidly, restricting the model's focus to at most $t-10$. Consequently, it fails because it attempts to predict a 21-day cycle using only 10 days of context.
+
+\subsubsection{Attention LSTM: Signal Dilution}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/lstm_att_ig.png}
+    \caption{\textbf{Integrated Gradients (Attention LSTM)}}
+    \label{fig:lstm_att_ig}
+\end{figure}
+
+The Attention mechanism solved the gradient flow issue, as evidenced by the attribution spread across the window. However, the model fails to \textit{focus}. Instead of pinpointing the deterministic $t-21$ signal, it distributes importance across the entire month, effectively averaging the volatility regime. While this captures general market dynamics, it dilutes the specific mathematical signal required for accurate forecasting.
+
+\textbf{Feature Selection Strategy:}
+The analysis highlights redundancy in features like \newline \texttt{YZVolatility} (similar to \texttt{RealisedVolatility}) and \texttt{Log\_HL} (similar to \texttt{LogReturn}). As Attention LSTM is the only architecture capable of assessing relevance across the entire sequence without the bias of gradient decay (Standard LSTM) or static structural constraints (Random Forest), we rely on its explanations to guide feature selection.
+
+\section{Actions and Insights}
+
+\subsection{Performance of Optimized Models}
+Following the insights from the previous section, we performed \textbf{Explanation-Guided \\ Feature Selection}. We identified the top 5 predictive features (Log Returns, MACD, BB\_Width, RSI, and Realised Volatility) based on the Attention LSTM's attribution and retrained all architectures.
+
+\begin{table}[H]
+    \centering
+    \caption{Impact of Feature Selection on Test Performance}
+    \label{tab:fs_comparison}
+    \begin{tabular}{lccccc}
+        \toprule
+                               & \multicolumn{2}{c}{\textbf{Full Feature Set}} & \multicolumn{2}{c}{\textbf{Reduced Feature Set}} &                                                      \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+        \textbf{Model}         & \textbf{MAE}                                  & \textbf{RMSE}                                    & \textbf{MAE} & \textbf{RMSE} & \textbf{Change (MAE)} \\
+        \midrule
+        Naive Baseline         & 0.0990                                        & 0.2078                                           & ---          & ---           & ---                   \\
+        \addlinespace
+        \textbf{Random Forest} & \textbf{0.0896}                               & \textbf{0.1897}                                  & 0.0899       & 0.1900        & +0.25\%               \\
+        Standard LSTM          & 0.0981                                        & 0.2051                                           & 0.0980       & 0.2054        & -0.08\%               \\
+        Attention LSTM         & 0.0988                                        & 0.2070                                           & 0.0985       & 0.2065        & -0.32\%               \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{itemize}
+    \item The \textbf{Random Forest} remained remarkably stable, confirming its internal ability to filter noise without manual intervention.
+    \item The \textbf{LSTMs} showed negligible improvement. The fact that removing noisy inputs did not significantly lower the error reinforces our conclusion that the limitation is architectural (gradient flow) rather than data-related.
+\end{itemize}
+
+However, it is also important to notice that achieving comparable performance with \textbf{37.5\% fewer features} (5 vs. 8) is a positive outcome. It demonstrates that the removed variables were indeed redundant, and we have successfully reduced model complexity and training cost without sacrificing predictive power.
+
+\subsection{Visual XAI: Why Feature Selection Failed}
+
+\subsubsection{Random Forest: The ``Sniper'' Strategy Persists}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/fs_rf_shap.png}
+    \caption{\textbf{SHAP Summary (RF with Feature Selection).}}
+    \label{fig:fs_rf_shap}
+\end{figure}
+
+As SHAP gave almost all of the importance to \texttt{LogReturn\_t-21}, it was expected that removing non-important features would barely affect performance.
+
+\subsubsection{Standard LSTM: The ``Recency Trap'' Continues}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/fs_lstm_ig.png}
+    \caption{\textbf{Integrated Gradients (Standard LSTM).}}
+    \label{fig:fs_lstm_ig}
+\end{figure}
+
+Despite removing noisy features, the Standard LSTM remains structurally incapable of reaching the $t-21$ signal. The heatmap is entirely grey from $t-21$ to $t-10$, proving that \textbf{Vanishing Gradients} prevent the model from learning the optimal strategy. It is forced to over-rely on \texttt{BB\_Width} at $t-1$, explaining why its performance remained stagnant—it was effectively ignoring the extra features regardless of whether they were present or not.
+
+\subsubsection{Attention LSTM: The ``Wrong Focus''}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/fs_lstm_att_ig.png}
+    \caption{\textbf{Integrated Gradients (Attention LSTM).}}
+    \label{fig:fs_lstm_att_ig}
+\end{figure}
+
+The Attention mechanism used the cleaner feature set to find a \textit{new} pattern: a block of intense \textbf{\texttt{RSI}} activity between $t-4$ and $t-9$ (Red Block). While this ``Weekly Momentum'' is a valid signal that allowed the model to maintain parity with the full version, the metrics prove it is **inferior** to the ``Monthly Mean Reversion'' ($t-21$) found by the Random Forest.
+
+\subsection{Domain Recommendations}
+\begin{enumerate}
+    \item \textbf{Simplicity Wins:} For daily stock data ($\approx 2,500$ samples), Random Forests outperform LSTMs because they can capture sparse, long-term dependencies ($t-21$) without the vanishing gradient bottleneck.
+    \item \textbf{Engineer the Cycle:} Since $t-21$ is the dominant predictor, future models should explicitly include a \texttt{Return\_Lag\_21} feature rather than relying on neural networks to learn this subtraction from raw sequences.
+\end{enumerate}
+
+\section{Discussion and Future Work}
+
+\subsection{Limitation: The ``Arithmetic Artifact''}
+While the Random Forest achieved the highest accuracy, the XAI analysis reveals a critical limitation. The model effectively ``reverse-engineered'' the arithmetic definition of the target variable rather than learning genuine market dynamics.
+
+Since Realised Volatility ($RV$) is calculated over a rolling 21-day window, the change ($\Delta RV$) is mathematically dominated by the difference between the new return ($t$) and the old return leaving the window ($t-21$):
+\[
+    \Delta RV \approx |r_t|^2 - |r_{t-21}|^2
+\]
+The Random Forest simply learned to perform a delayed subtraction: if the return at $t-21$ was small, volatility is likely to rise. While this minimizes RMSE, it renders the solution trivial. The model is acting as a calculator, not a forecaster, which explains why the LSTMs failed—they attempted to learn sequence patterns where there was only a simple arithmetic identity.
+
+\subsection{Insights from Neural Architectures}
+Despite lower performance, the LSTMs provided deeper financial insights when analyzed through Integrated Gradients:
+
+\textbf{1. Attention LSTM (The ``Trader''):} \\
+Instead of exploiting the $t-21$ artifact, this model identified a distinct block of high importance on \textbf{RSI} between $t-4$ and $t-9$. This indicates the network attempted to learn a ``Weekly Momentum'' strategy. While this signal was weaker than the arithmetic trick, it validates the Attention mechanism's ability to isolate complex behavioral patterns that simple decision trees miss.
+
+\textbf{2. Standard LSTM (The ``Efficient Skeptic''):} \\
+Despite suffering from Vanishing Gradients and being blind to $t-21$, the Standard LSTM matched the Attention model's performance ($MAE: 0.0981$ vs $0.0988$). By relying solely on yesterday's \textbf{Bollinger Band Width} ($t-1$), it proved that in high-noise environments, immediate context often contains as much predictive power as the full history. This challenges the assumption that ``Longer Memory'' is always superior.
+
+\subsection{Future Work: Transitioning to Intraday Data}
+To eliminate the ``Rolling Window'' artifact, future research must shift to **Intraday Data** (e.g., 5-minute bars).
+
+Currently, the target depends heavily on data leaving the 21-day window. By using high-frequency data, we can calculate volatility \textit{within} a single trading day:
+\[
+    RV_{today} = \sum_{i=1}^{N} (r_{5min}^2)
+\]
+This calculation resets daily, removing the dependency on the past. Predicting this target would force Neural Networks to learn genuine microstructure dynamics—such as liquidity drying up or panic selling—rather than simply performing a delayed subtraction.
+\end{document}
